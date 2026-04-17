@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NetVidRew</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="app">
+
+    <!-- 上方主区域：视频 + 右侧按钮 -->
+    <div id="main-area">
+
+      <!-- 视频区域（视频窗口 Win32 子窗口渲染于其上层，此处无 HTML 内容） -->
+      <div id="video-area"></div>
+
+      <!-- 右侧按钮栏（固定 216px） -->
+      <div id="right-panel">
+        <!-- 文件名显示区 -->
+        <div id="filename-display"></div>
+
+        <button id="btn-rewind"  class="btn"          title="后退 1/7 影片长度 (←)">⏪ 后退</button>
+        <button id="btn-play"    class="btn btn-play"  title="播放/暂停 (空格)">▶ 播放</button>
+        <button id="btn-forward" class="btn"           title="前进 1/7 影片长度 (→)">⏩ 前进</button>
+        <button id="btn-delete"  class="btn btn-danger" title="删除当前视频 (Del)">🗑 删除</button>
+      </div>
+
+    </div>
+
+    <!-- 底部控制栏（固定 140px） -->
+    <div id="controls">
+
+      <!-- 进度条行 -->
+      <div class="ctrl-row">
+        <input
+          id="progress-bar"
+          type="range"
+          min="0" max="100" value="0" step="0.1"
+          class="slider progress-slider"
+        />
+        <span id="time-display" class="time-label">0:00 / 0:00</span>
+      </div>
+
+      <!-- 音量行 -->
+      <div class="ctrl-row">
+        <span class="vol-icon">🔊</span>
+        <input
+          id="volume-bar"
+          type="range"
+          min="0" max="100" value="80" step="1"
+          class="slider volume-slider"
+        />
+        <span id="volume-display" class="vol-label">80</span>
+      </div>
+
+    </div>
+
+    <!-- 状态消息（绝对定位，叠加在控制栏上方，不被视频窗口遮挡） -->
+    <div id="status-msg"></div>
+
+  </div>
+
+  <script src="main.js"></script>
+</body>
+</html>

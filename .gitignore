@@ -1,0 +1,24 @@
+# Rust / Cargo 构建产物
+target/
+**/*.rs.bk
+
+# Tauri 生成文件（可由构建工具重新生成）
+# src-tauri/gen/
+
+# 系统文件
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 编辑器 / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 日志
+*.log
+
+# 环境变量（若将来引入）
+.env
+.env.*
