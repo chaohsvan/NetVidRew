@@ -33,6 +33,9 @@ impl MpvController {
     pub fn launch(file: Option<&Path>, wid: Option<isize>) -> Result<Self, String> {
         let socket_path = ipc_path();
 
+        // 杀掉可能残留的同名 MPV 进程，避免 IPC 管道被占用
+        kill_orphan_mpv();
+
         let mut cmd = Command::new("mpv");
         cmd.arg(format!("--input-ipc-server={}", socket_path))
             .arg("--idle=yes")
@@ -251,5 +254,38 @@ impl MpvController {
             .try_wait()
             .map(|s| s.is_none())
             .unwrap_or(false)
+    }
+}
+
+/// 应用退出时自动 kill MPV 子进程，防止孤儿进程占用 IPC 管道
+impl Drop for MpvController {
+    fn drop(&mut self) {
+        let _ = self.send_command(serde_json::json!({ "command": ["quit"] }));
+        let _ = self.process.kill();
+        let _ = self.process.wait();
+    }
+}
+
+/// 杀掉所有名为 mpv 的残留进程（跨平台）
+fn kill_orphan_mpv() {
+    #[cfg(windows)]
+    {
+        let _ = Command::new("taskkill")
+            .args(["/F", "/IM", "mpv.exe"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+        // 给 OS 一点时间释放管道
+        thread::sleep(Duration::from_millis(200));
+    }
+    #[cfg(unix)]
+    {
+        let _ = Command::new("pkill")
+            .arg("-f")
+            .arg("mpv")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+        thread::sleep(Duration::from_millis(200));
     }
 }

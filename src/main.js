@@ -4,56 +4,163 @@
 const { invoke } = window.__TAURI__.core;
 
 // ===== DOM 元素引用 =====
-const videoArea      = document.getElementById('video-area');
+const videoArea       = document.getElementById('video-area');
 const filenameDisplay = document.getElementById('filename-display');
-const statusMsg      = document.getElementById('status-msg');
-const progressBar    = document.getElementById('progress-bar');
-const timeLabel      = document.getElementById('time-display');
-const volumeBar      = document.getElementById('volume-bar');
-const volumeLabel    = document.getElementById('volume-display');
-const btnPlay        = document.getElementById('btn-play');
-const btnRewind      = document.getElementById('btn-rewind');
-const btnForward     = document.getElementById('btn-forward');
-const btnDelete      = document.getElementById('btn-delete');
+const statusMsg       = document.getElementById('status-msg');
+const progressBar     = document.getElementById('progress-bar');
+const timeLabel       = document.getElementById('time-display');
+const volumeBar       = document.getElementById('volume-bar');
+const volumeLabel     = document.getElementById('volume-display');
+const btnPlay         = document.getElementById('btn-play');
+const btnRewind       = document.getElementById('btn-rewind');
+const btnForward      = document.getElementById('btn-forward');
+const btnDelete       = document.getElementById('btn-delete');
+const btnMarkIn       = document.getElementById('btn-mark-in');
+const btnMarkOut      = document.getElementById('btn-mark-out');
+const btnClip         = document.getElementById('btn-clip');
+const clipRange       = document.getElementById('clip-range');
+const clipInMarker    = document.getElementById('clip-in-marker');
+const clipOutMarker   = document.getElementById('clip-out-marker');
 
-// ===== 前端状态 =====
-let state = {
+// ===== 统一应用状态 =====
+const state = {
+  // 播放
   duration:    0,
   currentTime: 0,
   volume:      80,
   isPaused:    true,
-  isDragging:  false,
-  pollTimer:   null,
   hasVideo:    false,
+  // 进度条拖拽
+  isDragging:  false,
+  // 轮询计时器
+  pollTimer:   null,
+  // 状态消息计时器
+  statusTimer: null,
+  // 裁剪入/出点（null 表示未标记）
+  clipIn:  null,
+  clipOut: null,
 };
 
 // ===== 工具函数 =====
 
 function formatTime(s) {
   if (!isFinite(s) || s < 0) return '0:00';
-  const m = Math.floor(s / 60);
+  const m   = Math.floor(s / 60);
   const sec = Math.floor(s % 60);
   return `${m}:${sec.toString().padStart(2, '0')}`;
 }
 
-function showStatus(msg, type = '') {
+/** 判断错误是否属于「用户主动取消」，取消不需要弹出错误提示 */
+function isCancelled(e) {
+  return e && String(e).includes('取消');
+}
+
+// ===== 状态消息 =====
+
+function showStatus(msg, type = '', autoClear = 0) {
   statusMsg.textContent = msg;
-  statusMsg.className = 'show' + (type ? ' ' + type : '');
+  statusMsg.className   = 'show' + (type ? ' ' + type : '');
+  if (state.statusTimer) clearTimeout(state.statusTimer);
+  if (autoClear > 0) {
+    state.statusTimer = setTimeout(clearStatus, autoClear);
+  }
 }
 
 function clearStatus() {
-  statusMsg.className = '';
+  statusMsg.className   = '';
   statusMsg.textContent = '';
 }
 
-/** 更新进度条渐变填充色 */
-function updateProgressFill(value, max) {
-  const pct = max > 0 ? (value / max) * 100 : 0;
-  progressBar.style.background =
-    `linear-gradient(to right, var(--accent) ${pct}%, var(--surface) ${pct}%)`;
+/** 统一错误处理：非取消操作才显示错误消息 */
+function handleError(e, prefix = '') {
+  if (isCancelled(e)) {
+    clearStatus();
+  } else {
+    showStatus(`⚠ ${prefix}${e}`, 'error');
+  }
 }
 
-/** 应用来自 Rust 的播放状态 */
+// ===== 进度条渲染 =====
+
+/** 通过 CSS 自定义属性驱动进度条渐变填充 */
+function updateProgressFill(value, max) {
+  const pct = max > 0 ? (value / max) * 100 : 0;
+  progressBar.style.setProperty('--progress-pct', `${pct}%`);
+}
+
+// ===== 裁剪入/出点标记 =====
+
+function timeToPercent(t) {
+  if (!state.duration || state.duration <= 0) return 0;
+  return Math.max(0, Math.min(100, (t / state.duration) * 100));
+}
+
+function renderClipMarkers() {
+  const hasIn  = state.clipIn  !== null;
+  const hasOut = state.clipOut !== null;
+
+  if (hasIn) {
+    clipInMarker.style.left    = `${timeToPercent(state.clipIn)}%`;
+    clipInMarker.style.display = 'block';
+  } else {
+    clipInMarker.style.display = 'none';
+  }
+
+  if (hasOut) {
+    clipOutMarker.style.left    = `${timeToPercent(state.clipOut)}%`;
+    clipOutMarker.style.display = 'block';
+  } else {
+    clipOutMarker.style.display = 'none';
+  }
+
+  const validRange = hasIn && hasOut && state.clipIn < state.clipOut;
+  if (validRange) {
+    const left  = timeToPercent(state.clipIn);
+    const right = timeToPercent(state.clipOut);
+    clipRange.style.left    = `${left}%`;
+    clipRange.style.width   = `${right - left}%`;
+    clipRange.style.display = 'block';
+  } else {
+    clipRange.style.display = 'none';
+  }
+
+  btnClip.disabled = !validRange;
+}
+
+function markIn() {
+  if (!state.hasVideo) return;
+  state.clipIn = state.currentTime;
+  btnMarkIn.classList.add('marked');
+  if (state.clipOut !== null && state.clipOut <= state.clipIn) {
+    state.clipOut = null;
+    btnMarkOut.classList.remove('marked');
+  }
+  renderClipMarkers();
+  showStatus(`入点：${formatTime(state.clipIn)}`, 'info', 1500);
+}
+
+function markOut() {
+  if (!state.hasVideo) return;
+  state.clipOut = state.currentTime;
+  btnMarkOut.classList.add('marked');
+  if (state.clipIn !== null && state.clipIn >= state.clipOut) {
+    state.clipIn = null;
+    btnMarkIn.classList.remove('marked');
+  }
+  renderClipMarkers();
+  showStatus(`出点：${formatTime(state.clipOut)}`, 'info', 1500);
+}
+
+function resetClipMarkers() {
+  state.clipIn  = null;
+  state.clipOut = null;
+  btnMarkIn.classList.remove('marked');
+  btnMarkOut.classList.remove('marked');
+  renderClipMarkers();
+}
+
+// ===== 播放状态同步 =====
+
 function applyPlaybackState(s) {
   state.duration    = s.duration  ?? 0;
   state.currentTime = s.time_pos  ?? 0;
@@ -61,48 +168,42 @@ function applyPlaybackState(s) {
   state.volume      = s.volume    ?? 80;
   state.hasVideo    = s.filename  !== '';
 
-  // 进度条（拖拽时不覆盖）
   if (!state.isDragging) {
     const max = state.duration > 0 ? state.duration : 100;
     progressBar.max   = max;
     progressBar.value = state.currentTime;
     updateProgressFill(state.currentTime, max);
     timeLabel.textContent = `${formatTime(state.currentTime)} / ${formatTime(state.duration)}`;
+    renderClipMarkers();
   }
 
-  // 音量
-  volumeBar.value = state.volume;
+  volumeBar.value         = state.volume;
   volumeLabel.textContent = state.volume;
+  btnPlay.textContent     = state.isPaused ? '▶ 播放' : '⏸ 暂停';
 
-  // 播放按钮文字
-  btnPlay.textContent = state.isPaused ? '▶ 播放' : '⏸ 暂停';
-
-  // 文件名显示区（右侧面板）
   if (s.filename) {
-    filenameDisplay.textContent = s.filename;
-    filenameDisplay.style.display = 'block';
+    filenameDisplay.textContent    = s.filename;
+    filenameDisplay.style.display  = 'block';
     document.title = `NetVidRew — ${s.filename}`;
   } else {
-    filenameDisplay.style.display = 'none';
+    filenameDisplay.style.display  = 'none';
     document.title = 'NetVidRew';
   }
 }
 
 // ===== 视频区域尺寸同步 =====
-// 当视频区域大小变化时通知 Rust 调整 Win32 子窗口
 
 let resizePending = false;
 
 async function syncVideoSize() {
   if (resizePending) return;
   resizePending = true;
-  // 延迟一帧确保 DOM 尺寸已稳定
   requestAnimationFrame(async () => {
     const rect = videoArea.getBoundingClientRect();
     try {
       await invoke('resize_video', {
-        x: Math.round(rect.left),
-        y: Math.round(rect.top),
+        x:      Math.round(rect.left),
+        y:      Math.round(rect.top),
         width:  Math.round(rect.width),
         height: Math.round(rect.height),
       });
@@ -122,12 +223,10 @@ async function pollPlaybackState() {
     applyPlaybackState(s);
     if (state.duration > 0 && state.currentTime >= state.duration - 0.5) {
       showStatus('播放完毕', 'info');
-    } else {
+    } else if (statusMsg.textContent === '播放完毕') {
       clearStatus();
     }
-  } catch (_) {
-    // MPV 未就绪时静默忽略
-  }
+  } catch (_) {}
 }
 
 function startPolling() {
@@ -150,17 +249,13 @@ async function openDirectory() {
     const files = await invoke('open_directory');
     if (files && files.length > 0) {
       state.hasVideo = true;
-      showStatus(`已加载 ${files.length} 个视频`, 'info');
+      resetClipMarkers();
+      showStatus(`已加载 ${files.length} 个视频`, 'info', 2000);
       startPolling();
-      await syncVideoSize(); // 确保视频子窗口尺寸正确
-      setTimeout(clearStatus, 2000);
+      await syncVideoSize();
     }
   } catch (e) {
-    if (e && !e.includes('取消')) {
-      showStatus(`⚠ ${e}`, 'error');
-    } else {
-      clearStatus();
-    }
+    handleError(e);
   }
 }
 
@@ -171,28 +266,25 @@ async function togglePlayPause() {
   }
   try {
     await invoke('play_pause');
-    state.isPaused = !state.isPaused;
+    state.isPaused      = !state.isPaused;
     btnPlay.textContent = state.isPaused ? '▶ 播放' : '⏸ 暂停';
   } catch (e) {
-    showStatus(`⚠ ${e}`, 'error');
+    handleError(e);
   }
 }
 
 async function seekRelative(secs) {
-  if (!state.hasVideo) return;
-  if (secs === 0) return;
+  if (!state.hasVideo || secs === 0) return;
   try {
     await invoke('seek_relative', { seconds: secs });
   } catch (e) {
-    showStatus(`⚠ ${e}`, 'error');
+    handleError(e);
   }
 }
 
-/** 跳转影片总长度的 1/7，方向由 sign (+1/-1) 决定 */
 async function seekByFraction(sign) {
   if (!state.hasVideo || state.duration <= 0) return;
-  const delta = (state.duration / 7) * sign;
-  await seekRelative(delta);
+  await seekRelative((state.duration / 7) * sign);
 }
 
 async function seekAbsolute(position) {
@@ -200,7 +292,7 @@ async function seekAbsolute(position) {
   try {
     await invoke('seek_absolute', { position });
   } catch (e) {
-    showStatus(`⚠ ${e}`, 'error');
+    handleError(e);
   }
 }
 
@@ -209,7 +301,7 @@ async function changeVolume(volume) {
     await invoke('set_volume', { volume: parseInt(volume) });
     volumeLabel.textContent = volume;
   } catch (e) {
-    showStatus(`⚠ ${e}`, 'error');
+    handleError(e);
   }
 }
 
@@ -222,18 +314,41 @@ async function deleteCurrentVideo() {
 
   try {
     const nextFile = await invoke('delete_current');
+    resetClipMarkers();
     if (nextFile === null || nextFile === undefined) {
-      state.hasVideo = false;
+      state.hasVideo                = false;
       filenameDisplay.style.display = 'none';
-      document.title = 'NetVidRew';
+      document.title                = 'NetVidRew';
       showStatus('所有视频已删除', 'info');
       stopPolling();
     } else {
-      showStatus('已删除，播放下一个', 'info');
-      setTimeout(clearStatus, 2000);
+      showStatus('已删除，播放下一个', 'info', 2000);
     }
   } catch (e) {
-    showStatus(`⚠ 删除失败：${e}`, 'error');
+    handleError(e, '删除失败：');
+  }
+}
+
+async function clipVideo() {
+  if (!state.hasVideo || state.clipIn === null || state.clipOut === null) return;
+  if (state.clipIn >= state.clipOut) {
+    showStatus('⚠ 入点必须早于出点', 'error', 2500);
+    return;
+  }
+
+  showStatus('正在导出…', 'info');
+  try {
+    const result = await invoke('clip_video', {
+      startSec: state.clipIn,
+      endSec:   state.clipOut,
+    });
+    if (result) {
+      showStatus(`✔ 裁剪完成：${result}`, 'success', 4000);
+    } else {
+      clearStatus();
+    }
+  } catch (e) {
+    handleError(e, '裁剪失败：');
   }
 }
 
@@ -243,6 +358,9 @@ btnPlay.addEventListener('click',    togglePlayPause);
 btnRewind.addEventListener('click',  () => seekByFraction(-1));
 btnForward.addEventListener('click', () => seekByFraction(1));
 btnDelete.addEventListener('click',  deleteCurrentVideo);
+btnMarkIn.addEventListener('click',  markIn);
+btnMarkOut.addEventListener('click', markOut);
+btnClip.addEventListener('click',    clipVideo);
 
 // 进度条拖拽
 progressBar.addEventListener('mousedown', () => { state.isDragging = true; });
@@ -258,19 +376,16 @@ progressBar.addEventListener('change', async (e) => {
 progressBar.addEventListener('mouseup', () => { state.isDragging = false; });
 
 // 音量条
-volumeBar.addEventListener('input', (e) => {
-  volumeLabel.textContent = e.target.value;
-});
-volumeBar.addEventListener('change', (e) => {
-  changeVolume(parseInt(e.target.value));
-});
+volumeBar.addEventListener('input',  (e) => { volumeLabel.textContent = e.target.value; });
+volumeBar.addEventListener('change', (e) => { changeVolume(parseInt(e.target.value)); });
 
 // 键盘快捷键
 document.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT') return;
   switch (e.code) {
-    case 'Space':      e.preventDefault(); togglePlayPause(); break;
-    case 'ArrowRight': seekByFraction(1);  break;
-    case 'ArrowLeft':  seekByFraction(-1); break;
+    case 'Space':      e.preventDefault(); togglePlayPause();   break;
+    case 'ArrowRight': seekByFraction(1);                       break;
+    case 'ArrowLeft':  seekByFraction(-1);                      break;
     case 'ArrowUp':
       volumeBar.value = Math.min(100, parseInt(volumeBar.value) + 5);
       changeVolume(parseInt(volumeBar.value));
@@ -280,15 +395,17 @@ document.addEventListener('keydown', (e) => {
       changeVolume(parseInt(volumeBar.value));
       break;
     case 'Delete': deleteCurrentVideo(); break;
+    case 'KeyI':   markIn();             break;
+    case 'KeyO':   markOut();            break;
+    case 'KeyC':   clipVideo();          break;
   }
 });
 
 // ===== 初始化 =====
 window.addEventListener('DOMContentLoaded', async () => {
-  // 初始同步视频区域尺寸（视频子窗口需对齐到 video-area）
+  btnClip.disabled = true;
   await syncVideoSize();
 
-  // 检查 MPV 是否安装
   try {
     const mpvOk = await invoke('check_mpv');
     if (!mpvOk) {
@@ -297,6 +414,5 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
   } catch (_) {}
 
-  // 自动弹出目录选择框
   await openDirectory();
 });

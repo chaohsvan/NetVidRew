@@ -6,24 +6,33 @@
 }
 
 :root {
-  --bg:        #1a1a1a;
-  --surface:   #2d2d2d;
-  --surface2:  #383838;
-  --accent:    #4a9eff;
-  --danger:    #e05555;
-  --text:      #e8e8e8;
-  --text-muted:#999;
-  --right-w:   216px;
-  --ctrl-h:    140px;
-  --btn-fs:    24px;
-  --btn-h:     48px;
+  --bg:           #1a1a1a;
+  --surface:      #2d2d2d;
+  --surface2:     #383838;
+  --accent:       #4a9eff;
+  --danger:       #e05555;
+  --text:         #e8e8e8;
+  --text-muted:   #999;
+
+  /* 新功能色系 */
+  --mark-in:      #2ecc71;   /* 入点：绿 */
+  --mark-in-dark: #27ae60;
+  --mark-out:     #e74c3c;   /* 出点：红 */
+  --mark-out-dark:#c0392b;
+  --clip:         #3498db;   /* 裁剪：蓝 */
+  --clip-dark:    #2980b9;
+  --clip-range:   rgba(52, 152, 219, 0.18); /* 区间高亮 */
+
+  --ctrl-h:       130px;
+  /* 按钮字号：随右侧面板宽度（20vw）自适应，最小 11px 最大 14px */
+  --btn-fs:       clamp(11px, 1.1vw, 14px);
 }
 
 html, body {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: transparent; /* 让窗口透明层生效 */
+  background: transparent;
   color: var(--text);
   font-family: "Microsoft YaHei", "微软雅黑", sans-serif;
   user-select: none;
@@ -46,68 +55,68 @@ html, body {
   overflow: hidden;
 }
 
-/* ===== 视频区域（无 HTML 内容，物理像素由 Win32 子窗口覆盖渲染） ===== */
+/* ===== 视频区域 ===== */
 #video-area {
   flex: 1;
   min-width: 0;
   position: relative;
-  background: #000; /* 黑色背景，MPV 启动前显示 */
+  background: #000;
   overflow: hidden;
 }
 
-/* ===== 右侧按钮栏 ===== */
+/* ===== 右侧按钮栏（20% 宽，flex 均分高度） ===== */
 #right-panel {
-  width: var(--right-w);
+  width: 20%;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  justify-content: space-around;
-  align-items: stretch;
-  padding: 12px 10px;
+  padding: 8px 12px;
+  gap: 6px;
   background: var(--bg);
   border-left: 1px solid #333;
-  gap: 8px;
+  overflow: hidden;
 }
 
-/* 文件名显示区（右侧面板顶部） */
+/* 文件名显示区 */
 #filename-display {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  padding: 4px 2px;
-  min-height: 20px;
-  display: none; /* 有内容时 JS 控制显示 */
+  padding: 2px 0 4px;
+  min-height: 0;
+  display: none;
 }
 
-/* 状态消息（绝对定位，覆盖在控制栏上方） */
-#status-msg {
-  position: fixed;
-  bottom: calc(var(--ctrl-h) + 12px);
-  right: calc(var(--right-w) + 12px);
-  font-size: 14px;
-  padding: 8px 16px;
-  border-radius: 6px;
-  background: rgba(0, 0, 0, 0.80);
-  color: var(--text);
-  pointer-events: none;
-  display: none;
-  z-index: 10;
+/* ===== 按钮行容器 ===== */
+.btn-row {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: stretch;
 }
-#status-msg.show {
-  display: block;
+
+/* 双按钮行：两个按钮各占一半，中间留 6px 间距 */
+.btn-row-double {
+  gap: 6px;
 }
-#status-msg.error {
-  background: rgba(160, 40, 40, 0.85);
+
+.btn-row-double .btn {
+  flex: 1;
 }
-#status-msg.info {
-  background: rgba(20, 80, 160, 0.85);
+
+/* 单按钮行：宽 85%，居中 */
+.btn-row-single {
+  justify-content: center;
+}
+
+.btn-row-single .btn {
+  width: 85%;
 }
 
 /* ===== 通用按钮 ===== */
 .btn {
-  height: var(--btn-h);
   font-size: var(--btn-fs);
   font-family: inherit;
   background: var(--surface);
@@ -119,39 +128,68 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  flex: 1;
+  gap: 4px;
   min-height: 0;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
-.btn:hover {
-  background: var(--surface2);
+.btn:hover  { background: var(--surface2); }
+.btn:active { transform: scale(0.96); }
+
+/* 入点按钮（绿） */
+.btn-mark {
+  font-weight: bold;
 }
 
-.btn:active {
-  transform: scale(0.96);
+#btn-mark-in {
+  background: var(--mark-in);
+  border-color: var(--mark-in-dark);
+  color: #fff;
 }
+#btn-mark-in:hover  { background: #3ddb7e; }
 
+#btn-mark-out {
+  background: var(--mark-out);
+  border-color: var(--mark-out-dark);
+  color: #fff;
+}
+#btn-mark-out:hover { background: #f05a4a; }
+
+/* 已标记状态：外发光提示 */
+#btn-mark-in.marked  { box-shadow: 0 0 0 2px var(--mark-in); }
+#btn-mark-out.marked { box-shadow: 0 0 0 2px var(--mark-out); }
+
+/* 裁剪按钮（蓝） */
+.btn-clip {
+  background: var(--clip);
+  border-color: var(--clip-dark);
+  color: #fff;
+  font-weight: bold;
+}
+.btn-clip:hover { background: #4aa8e8; }
+.btn-clip:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.btn-clip:disabled:hover { background: var(--clip); transform: none; }
+
+/* 暂停按钮（强调蓝） */
 .btn-play {
   background: var(--accent);
   border-color: #3680cc;
   color: #fff;
   font-weight: bold;
 }
+.btn-play:hover { background: #5aaeff; }
 
-.btn-play:hover {
-  background: #5aaeff;
-}
-
+/* 危险按钮（橙红） */
 .btn-danger {
   background: var(--danger);
   border-color: #b03030;
   color: #fff;
 }
-
-.btn-danger:hover {
-  background: #f06060;
-}
+.btn-danger:hover { background: #f06060; }
 
 /* ===== 底部控制栏 ===== */
 #controls {
@@ -166,45 +204,147 @@ html, body {
   border-top: 1px solid #333;
 }
 
-/* 控制行 */
 .ctrl-row {
   display: flex;
   align-items: center;
   gap: 10px;
-  height: 60px;
+  height: 44px;
+}
+
+/* 进度条行：progress-wrap 占满剩余空间 */
+.progress-row {
+  gap: 10px;
+}
+
+/* ===== 进度条包装层（相对定位，叠加标记线） ===== */
+#progress-wrap {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+  overflow: visible;
 }
 
 /* ===== 滑块（进度条 + 音量条） ===== */
 .slider {
-  flex: 1;
-  height: 6px;
+  width: 100%;
+  /* 可交互高度 = 上下各 12px padding + 6px 轨道 = 30px，
+     元素自身 height 设为 0，靠 padding 撑开，
+     轨道外观由 ::-webkit-slider-runnable-track 单独控制 */
+  height: 0;
+  padding: 12px 0;
   cursor: pointer;
   -webkit-appearance: none;
   appearance: none;
-  border-radius: 3px;
-  background: var(--surface);
+  background: transparent;
   outline: none;
-  transition: height 0.15s;
+  position: relative;
+  z-index: 2;
+  box-sizing: content-box;
 }
 
-.slider:hover {
-  height: 8px;
+/* 公共轨道样式 */
+.slider::-webkit-slider-runnable-track {
+  height: 30px;
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+/* 进度条轨道：由 JS 通过 --progress-pct 自定义属性驱动渐变填充 */
+.progress-slider::-webkit-slider-runnable-track {
+  background: linear-gradient(
+    to right,
+    var(--accent) var(--progress-pct, 0%),
+    var(--surface) var(--progress-pct, 0%)
+  );
 }
 
 .slider::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
+  width: 20px;
+  height: 36px;
+  border-radius: 4px;
   background: var(--accent);
   cursor: pointer;
   border: none;
   transition: transform 0.1s;
+  /* 垂直居中：-(thumb_h - track_h) / 2 = -(36-30)/2 = -3px */
+  margin-top: -3px;
+  position: relative;
+  z-index: 3;
+}
+.slider::-webkit-slider-thumb:hover { transform: scale(1.05); }
+
+/* ===== 入/出点叠加层 ===== */
+#clip-overlay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+  /* 为顶部三角旗标留出溢出空间 */
+  overflow: visible;
 }
 
-.slider::-webkit-slider-thumb:hover {
-  transform: scale(1.2);
+/* 区间高亮条 */
+#clip-range {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  background: var(--clip-range);
+  border: 1px solid rgba(52, 152, 219, 0.4);
+  border-radius: 2px;
+  display: none;
 }
+
+/* 入/出点标记——贯穿整个轨道的宽竖条 + 顶部三角旗标 */
+.clip-marker {
+  position: absolute;
+  top: 0;
+  width: 4px;
+  height: 100%;
+  margin-left: -2px;
+  border-radius: 1px;
+  display: none;
+}
+
+/* 顶部三角旗标（伪元素）*/
+.clip-marker::before {
+  content: '';
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-left:  7px solid transparent;
+  border-right: 7px solid transparent;
+}
+
+.clip-marker-in  { background: var(--mark-in); }
+.clip-marker-out { background: var(--mark-out); }
+
+.clip-marker-in::before  { border-top: 9px solid var(--mark-in); }
+.clip-marker-out::before { border-top: 9px solid var(--mark-out); }
+
+/* ===== 状态消息（绝对定位） ===== */
+#status-msg {
+  position: fixed;
+  bottom: calc(var(--ctrl-h) + 12px);
+  right: calc(20% + 12px);
+  font-size: 14px;
+  padding: 8px 16px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.80);
+  color: var(--text);
+  pointer-events: none;
+  display: none;
+  z-index: 10;
+}
+#status-msg.show  { display: block; }
+#status-msg.error { background: rgba(160, 40, 40, 0.85); }
+#status-msg.info  { background: rgba(20, 80, 160, 0.85); }
+#status-msg.success { background: rgba(20, 130, 60, 0.88); }
 
 /* ===== 标签 ===== */
 .time-label {
