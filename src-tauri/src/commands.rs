@@ -109,6 +109,42 @@ pub fn get_playback_state(state: State<'_, AppState>) -> Result<PlaybackState, S
     Ok(PlaybackState { time_pos, duration, paused, volume, filename })
 }
 
+/// 切换到下一个视频；返回下一个文件名，None 表示已是最后一个
+#[tauri::command]
+pub fn navigate_next(state: State<'_, AppState>) -> Result<Option<String>, String> {
+    let next_file = {
+        let mut pl = state.playlist.lock().map_err(|e| e.to_string())?;
+        pl.next().cloned()
+    };
+
+    if let Some(ref next) = next_file {
+        let mpv_guard = state.mpv.lock().map_err(|e| e.to_string())?;
+        if let Some(ctrl) = mpv_guard.as_ref() {
+            ctrl.play_file(next)?;
+        }
+    }
+
+    Ok(next_file.and_then(|p| p.file_name().map(|n| n.to_string_lossy().to_string())))
+}
+
+/// 切换到上一个视频；返回上一个文件名，None 表示已是第一个
+#[tauri::command]
+pub fn navigate_prev(state: State<'_, AppState>) -> Result<Option<String>, String> {
+    let prev_file = {
+        let mut pl = state.playlist.lock().map_err(|e| e.to_string())?;
+        pl.prev().cloned()
+    };
+
+    if let Some(ref prev) = prev_file {
+        let mpv_guard = state.mpv.lock().map_err(|e| e.to_string())?;
+        if let Some(ctrl) = mpv_guard.as_ref() {
+            ctrl.play_file(prev)?;
+        }
+    }
+
+    Ok(prev_file.and_then(|p| p.file_name().map(|n| n.to_string_lossy().to_string())))
+}
+
 /// 删除当前视频文件并播放下一个；返回下一个文件名，None 表示列表已空
 #[tauri::command]
 pub fn delete_current(state: State<'_, AppState>) -> Result<Option<String>, String> {

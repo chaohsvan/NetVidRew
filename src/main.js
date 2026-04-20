@@ -14,6 +14,8 @@ const volumeLabel     = document.getElementById('volume-display');
 const btnPlay         = document.getElementById('btn-play');
 const btnRewind       = document.getElementById('btn-rewind');
 const btnForward      = document.getElementById('btn-forward');
+const btnPrev         = document.getElementById('btn-prev');
+const btnNext         = document.getElementById('btn-next');
 const btnDelete       = document.getElementById('btn-delete');
 const btnMarkIn       = document.getElementById('btn-mark-in');
 const btnMarkOut      = document.getElementById('btn-mark-out');
@@ -215,6 +217,9 @@ async function syncVideoSize() {
 const resizeObserver = new ResizeObserver(syncVideoSize);
 resizeObserver.observe(videoArea);
 
+// 点击视频区域后焦点会丢到 Win32 子窗口，立即抢回到 body 保持快捷键可用
+videoArea.addEventListener('mousedown', () => document.body.focus());
+
 // ===== 状态轮询 =====
 
 async function pollPlaybackState() {
@@ -305,6 +310,36 @@ async function changeVolume(volume) {
   }
 }
 
+async function navigateNext() {
+  if (!state.hasVideo) return;
+  try {
+    const nextFile = await invoke('navigate_next');
+    resetClipMarkers();
+    if (nextFile === null || nextFile === undefined) {
+      showStatus('已是最后一个视频', 'info', 2000);
+    } else {
+      showStatus(`下一个：${nextFile}`, 'info', 2000);
+    }
+  } catch (e) {
+    handleError(e, '切换失败：');
+  }
+}
+
+async function navigatePrev() {
+  if (!state.hasVideo) return;
+  try {
+    const prevFile = await invoke('navigate_prev');
+    resetClipMarkers();
+    if (prevFile === null || prevFile === undefined) {
+      showStatus('已是第一个视频', 'info', 2000);
+    } else {
+      showStatus(`上一个：${prevFile}`, 'info', 2000);
+    }
+  } catch (e) {
+    handleError(e, '切换失败：');
+  }
+}
+
 async function deleteCurrentVideo() {
   if (!state.hasVideo) return;
   const confirmed = window.confirm(
@@ -357,6 +392,8 @@ async function clipVideo() {
 btnPlay.addEventListener('click',    togglePlayPause);
 btnRewind.addEventListener('click',  () => seekByFraction(-1));
 btnForward.addEventListener('click', () => seekByFraction(1));
+btnPrev.addEventListener('click',    navigatePrev);
+btnNext.addEventListener('click',    navigateNext);
 btnDelete.addEventListener('click',  deleteCurrentVideo);
 btnMarkIn.addEventListener('click',  markIn);
 btnMarkOut.addEventListener('click', markOut);
@@ -384,17 +421,21 @@ document.addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT') return;
   switch (e.code) {
     case 'Space':      e.preventDefault(); togglePlayPause();   break;
-    case 'ArrowRight': seekByFraction(1);                       break;
-    case 'ArrowLeft':  seekByFraction(-1);                      break;
+    case 'ArrowRight': e.preventDefault(); seekByFraction(1);   break;
+    case 'ArrowLeft':  e.preventDefault(); seekByFraction(-1);  break;
     case 'ArrowUp':
+      e.preventDefault();
       volumeBar.value = Math.min(100, parseInt(volumeBar.value) + 5);
       changeVolume(parseInt(volumeBar.value));
       break;
     case 'ArrowDown':
+      e.preventDefault();
       volumeBar.value = Math.max(0, parseInt(volumeBar.value) - 5);
       changeVolume(parseInt(volumeBar.value));
       break;
-    case 'Delete': deleteCurrentVideo(); break;
+    case 'Delete':     deleteCurrentVideo();  break;
+    case 'BracketLeft':  navigatePrev();      break;  // [
+    case 'BracketRight': navigateNext();      break;  // ]
     case 'KeyI':   markIn();             break;
     case 'KeyO':   markOut();            break;
     case 'KeyC':   clipVideo();          break;
@@ -404,6 +445,9 @@ document.addEventListener('keydown', (e) => {
 // ===== 初始化 =====
 window.addEventListener('DOMContentLoaded', async () => {
   btnClip.disabled = true;
+  // 页面加载后立即抢占焦点，确保键盘快捷键无需先点击页面
+  document.body.setAttribute('tabindex', '-1');
+  document.body.focus();
   await syncVideoSize();
 
   try {

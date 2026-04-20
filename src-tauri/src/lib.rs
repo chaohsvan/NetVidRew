@@ -60,6 +60,8 @@ pub fn run() {
             commands::seek_absolute,
             commands::set_volume,
             commands::get_playback_state,
+            commands::navigate_next,
+            commands::navigate_prev,
             commands::delete_current,
             commands::resize_video,
             commands::clip_video,

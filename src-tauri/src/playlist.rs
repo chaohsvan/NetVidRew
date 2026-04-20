@@ -51,6 +51,15 @@ impl Playlist {
         }
     }
 
+    /// 移动到上一个文件，返回上一个文件路径（若有）
+    pub fn prev(&mut self) -> Option<&PathBuf> {
+        if self.files.is_empty() || self.current == 0 {
+            return None; // 已是第一个
+        }
+        self.current -= 1;
+        self.files.get(self.current)
+    }
+
     /// 删除当前文件，返回被删除的路径；自动调整索引到下一个合法位置
     pub fn remove_current(&mut self) -> Option<PathBuf> {
         if self.files.is_empty() {
