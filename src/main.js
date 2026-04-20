@@ -409,12 +409,22 @@ progressBar.addEventListener('input', (e) => {
 progressBar.addEventListener('change', async (e) => {
   state.isDragging = false;
   await seekAbsolute(parseFloat(e.target.value));
+  progressBar.blur();
+  document.body.focus();
 });
-progressBar.addEventListener('mouseup', () => { state.isDragging = false; });
+progressBar.addEventListener('mouseup', () => {
+  state.isDragging = false;
+  progressBar.blur();
+  document.body.focus();
+});
 
 // 音量条
 volumeBar.addEventListener('input',  (e) => { volumeLabel.textContent = e.target.value; });
-volumeBar.addEventListener('change', (e) => { changeVolume(parseInt(e.target.value)); });
+volumeBar.addEventListener('change', (e) => {
+  changeVolume(parseInt(e.target.value));
+  volumeBar.blur();
+  document.body.focus();
+});
 
 // 键盘快捷键
 document.addEventListener('keydown', (e) => {
@@ -439,6 +449,11 @@ document.addEventListener('keydown', (e) => {
     case 'KeyI':   markIn();             break;
     case 'KeyO':   markOut();            break;
     case 'KeyC':   clipVideo();          break;
+    case 'Digit1': seekAbsolute(state.duration * 1 / 6); break;
+    case 'Digit2': seekAbsolute(state.duration * 2 / 6); break;
+    case 'Digit3': seekAbsolute(state.duration * 3 / 6); break;
+    case 'Digit4': seekAbsolute(state.duration * 4 / 6); break;
+    case 'Digit5': seekAbsolute(state.duration * 5 / 6); break;
   }
 });
 
