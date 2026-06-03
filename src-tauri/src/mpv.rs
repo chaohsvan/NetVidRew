@@ -238,16 +238,6 @@ impl MpvController {
         Ok(())
     }
 
-    /// 退出 MPV 进程
-    pub fn quit(&mut self) -> Result<(), String> {
-        let _ = self.send_command(serde_json::json!({
-            "command": ["quit"]
-        }));
-        thread::sleep(Duration::from_millis(200));
-        let _ = self.process.kill();
-        Ok(())
-    }
-
     /// 检查 MPV 进程是否还在运行
     pub fn is_running(&mut self) -> bool {
         self.process

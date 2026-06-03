@@ -23,6 +23,11 @@ const btnClip         = document.getElementById('btn-clip');
 const clipRange       = document.getElementById('clip-range');
 const clipInMarker    = document.getElementById('clip-in-marker');
 const clipOutMarker   = document.getElementById('clip-out-marker');
+const playlistEl      = document.getElementById('playlist');
+const playlistEmpty   = document.getElementById('playlist-empty');
+const playlistCount   = document.getElementById('playlist-count');
+const sortNameBtn     = document.getElementById('sort-name');
+const sortSizeBtn     = document.getElementById('sort-size');
 
 // ===== 统一应用状态 =====
 const state = {
@@ -32,12 +37,18 @@ const state = {
   volume:      80,
   isPaused:    true,
   hasVideo:    false,
+  filename:    '',
+  endHandledFor: '',
+  isAutoAdvancing: false,
   // 进度条拖拽
   isDragging:  false,
   // 轮询计时器
   pollTimer:   null,
   // 状态消息计时器
   statusTimer: null,
+  // 播放列表
+  currentSortMode: 'name',
+  isSwitchingPlaylist: false,
   // 裁剪入/出点（null 表示未标记）
   clipIn:  null,
   clipOut: null,
@@ -50,6 +61,19 @@ function formatTime(s) {
   const m   = Math.floor(s / 60);
   const sec = Math.floor(s % 60);
   return `${m}:${sec.toString().padStart(2, '0')}`;
+}
+
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let value = bytes;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  const digits = value >= 100 || unitIndex === 0 ? 0 : 1;
+  return `${value.toFixed(digits)} ${units[unitIndex]}`;
 }
 
 /** 判断错误是否属于「用户主动取消」，取消不需要弹出错误提示 */
@@ -161,14 +185,104 @@ function resetClipMarkers() {
   renderClipMarkers();
 }
 
+// ===== 播放列表 =====
+
+function setActiveSort(mode) {
+  state.currentSortMode = mode;
+  sortNameBtn.classList.toggle('active', mode === 'name');
+  sortSizeBtn.classList.toggle('active', mode === 'size');
+}
+
+function renderPlaylist(playlistState) {
+  const items = playlistState?.items ?? [];
+  setActiveSort(playlistState?.sort_mode ?? 'name');
+  playlistCount.textContent = `${items.length} 个视频`;
+  playlistEmpty.style.display = items.length === 0 ? 'flex' : 'none';
+  playlistEl.replaceChildren();
+
+  const fragment = document.createDocumentFragment();
+  items.forEach((item, index) => {
+    const row = document.createElement('li');
+    row.className = 'playlist-item';
+    if (item.is_current) row.classList.add('current');
+    row.title = item.path;
+    row.tabIndex = 0;
+    row.dataset.index = String(index);
+
+    const indexEl = document.createElement('span');
+    indexEl.className = 'item-index';
+    indexEl.textContent = String(index + 1).padStart(2, '0');
+
+    const nameEl = document.createElement('span');
+    nameEl.className = 'item-name';
+    nameEl.textContent = item.name;
+
+    const sizeEl = document.createElement('span');
+    sizeEl.className = 'item-size';
+    sizeEl.textContent = formatBytes(item.size);
+
+    row.append(indexEl, nameEl, sizeEl);
+    fragment.appendChild(row);
+  });
+
+  playlistEl.appendChild(fragment);
+  playlistEl.querySelector('.playlist-item.current')?.scrollIntoView({
+    block: 'nearest',
+  });
+}
+
+async function refreshPlaylist() {
+  try {
+    const playlistState = await invoke('get_playlist_state');
+    renderPlaylist(playlistState);
+  } catch (_) {}
+}
+
+async function changePlaylistSort(mode) {
+  if (mode === state.currentSortMode) return;
+  setActiveSort(mode);
+  try {
+    const playlistState = await invoke('set_playlist_sort', { sortMode: mode });
+    renderPlaylist(playlistState);
+  } catch (_) {
+    await refreshPlaylist();
+  }
+}
+
+async function playPlaylistIndex(index) {
+  if (state.isSwitchingPlaylist || !Number.isFinite(index)) return;
+  const currentRow = playlistEl.querySelector('.playlist-item.current');
+  if (currentRow && Number(currentRow.dataset.index) === index) return;
+
+  state.isSwitchingPlaylist = true;
+  playlistEl.classList.add('switching');
+  try {
+    const playlistState = await invoke('play_playlist_index', { index });
+    resetClipMarkers();
+    renderPlaylist(playlistState);
+  } catch (e) {
+    handleError(e, '切换失败：');
+    await refreshPlaylist();
+  } finally {
+    state.isSwitchingPlaylist = false;
+    playlistEl.classList.remove('switching');
+  }
+}
+
 // ===== 播放状态同步 =====
 
 function applyPlaybackState(s) {
+  const filename = s.filename ?? '';
+  if (filename !== state.filename) {
+    state.filename = filename;
+    state.endHandledFor = '';
+  }
+
   state.duration    = s.duration  ?? 0;
   state.currentTime = s.time_pos  ?? 0;
   state.isPaused    = s.paused    ?? true;
   state.volume      = s.volume    ?? 80;
-  state.hasVideo    = s.filename  !== '';
+  state.hasVideo    = filename    !== '';
 
   if (!state.isDragging) {
     const max = state.duration > 0 ? state.duration : 100;
@@ -183,10 +297,10 @@ function applyPlaybackState(s) {
   volumeLabel.textContent = state.volume;
   btnPlay.textContent     = state.isPaused ? '▶ 播放' : '⏸ 暂停';
 
-  if (s.filename) {
-    filenameDisplay.textContent    = s.filename;
+  if (filename) {
+    filenameDisplay.textContent    = filename;
     filenameDisplay.style.display  = 'block';
-    document.title = `NetVidRew — ${s.filename}`;
+    document.title = `NetVidRew — ${filename}`;
   } else {
     filenameDisplay.style.display  = 'none';
     document.title = 'NetVidRew';
@@ -226,12 +340,40 @@ async function pollPlaybackState() {
   try {
     const s = await invoke('get_playback_state');
     applyPlaybackState(s);
+    await refreshPlaylist();
     if (state.duration > 0 && state.currentTime >= state.duration - 0.5) {
-      showStatus('播放完毕', 'info');
-    } else if (statusMsg.textContent === '播放完毕') {
-      clearStatus();
+      await autoAdvanceAtEnd();
+    } else {
+      if (state.duration > 0 && state.currentTime < state.duration - 1.5) {
+        state.endHandledFor = '';
+      }
+      if (statusMsg.textContent === '播放完毕') {
+        clearStatus();
+      }
     }
   } catch (_) {}
+}
+
+async function autoAdvanceAtEnd() {
+  if (!state.hasVideo || !state.filename || state.isAutoAdvancing) return;
+  if (state.endHandledFor === state.filename) return;
+
+  state.endHandledFor = state.filename;
+  state.isAutoAdvancing = true;
+  try {
+    const nextFile = await invoke('navigate_next');
+    resetClipMarkers();
+    if (nextFile === null || nextFile === undefined) {
+      showStatus('播放完毕，已是最后一个视频', 'info');
+    } else {
+      showStatus(`顺序播放：${nextFile}`, 'info', 1500);
+      await refreshPlaylist();
+    }
+  } catch (e) {
+    handleError(e, '顺序播放失败：');
+  } finally {
+    state.isAutoAdvancing = false;
+  }
 }
 
 function startPolling() {
@@ -258,6 +400,7 @@ async function openDirectory() {
       showStatus(`已加载 ${files.length} 个视频`, 'info', 2000);
       startPolling();
       await syncVideoSize();
+      await refreshPlaylist();
     }
   } catch (e) {
     handleError(e);
@@ -319,6 +462,7 @@ async function navigateNext() {
       showStatus('已是最后一个视频', 'info', 2000);
     } else {
       showStatus(`下一个：${nextFile}`, 'info', 2000);
+      await refreshPlaylist();
     }
   } catch (e) {
     handleError(e, '切换失败：');
@@ -334,6 +478,7 @@ async function navigatePrev() {
       showStatus('已是第一个视频', 'info', 2000);
     } else {
       showStatus(`上一个：${prevFile}`, 'info', 2000);
+      await refreshPlaylist();
     }
   } catch (e) {
     handleError(e, '切换失败：');
@@ -356,8 +501,10 @@ async function deleteCurrentVideo() {
       document.title                = 'NetVidRew';
       showStatus('所有视频已删除', 'info');
       stopPolling();
+      await refreshPlaylist();
     } else {
       showStatus('已删除，播放下一个', 'info', 2000);
+      await refreshPlaylist();
     }
   } catch (e) {
     handleError(e, '删除失败：');
@@ -398,6 +545,22 @@ btnDelete.addEventListener('click',  deleteCurrentVideo);
 btnMarkIn.addEventListener('click',  markIn);
 btnMarkOut.addEventListener('click', markOut);
 btnClip.addEventListener('click',    clipVideo);
+sortNameBtn.addEventListener('click', () => changePlaylistSort('name'));
+sortSizeBtn.addEventListener('click', () => changePlaylistSort('size'));
+
+playlistEl.addEventListener('click', (e) => {
+  const row = e.target.closest('.playlist-item');
+  if (!row) return;
+  playPlaylistIndex(Number(row.dataset.index));
+});
+
+playlistEl.addEventListener('keydown', (e) => {
+  if (e.code !== 'Enter' && e.code !== 'Space') return;
+  const row = e.target.closest('.playlist-item');
+  if (!row) return;
+  e.preventDefault();
+  playPlaylistIndex(Number(row.dataset.index));
+});
 
 // 进度条拖拽
 progressBar.addEventListener('mousedown', () => { state.isDragging = true; });
@@ -429,6 +592,7 @@ volumeBar.addEventListener('change', (e) => {
 // 键盘快捷键
 document.addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT') return;
+  if (e.target.closest('#playlist')) return;
   switch (e.code) {
     case 'Space':      e.preventDefault(); togglePlayPause();   break;
     case 'ArrowRight': e.preventDefault(); seekByFraction(1);   break;
@@ -464,6 +628,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   document.body.setAttribute('tabindex', '-1');
   document.body.focus();
   await syncVideoSize();
+  await refreshPlaylist();
 
   try {
     const mpvOk = await invoke('check_mpv');

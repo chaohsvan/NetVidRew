@@ -21,37 +21,56 @@
         <!-- 文件名显示区 -->
         <div id="filename-display"></div>
 
-        <!-- 第1行：入点 / 出点（新功能·双按钮） -->
-        <div class="btn-row btn-row-double">
-          <button id="btn-mark-in"  class="btn btn-mark" title="标记入点 (I)">⬅ 入点</button>
-          <button id="btn-mark-out" class="btn btn-mark" title="标记出点 (O)">出点 ➡</button>
+        <div id="control-buttons">
+          <!-- 第1行：入点 / 出点 -->
+          <div class="btn-row btn-row-double">
+            <button id="btn-mark-in"  class="btn btn-mark" title="标记入点 (I)">⬅ 入点</button>
+            <button id="btn-mark-out" class="btn btn-mark" title="标记出点 (O)">出点 ➡</button>
+          </div>
+
+          <!-- 第2行：裁剪 -->
+          <div class="btn-row btn-row-single">
+            <button id="btn-clip" class="btn btn-clip" title="裁剪并导出 (C)">✂ 裁剪</button>
+          </div>
+
+          <!-- 第3行：快退 / 快进 -->
+          <div class="btn-row btn-row-double">
+            <button id="btn-rewind"  class="btn" title="后退 1/7 影片长度 (←)">⏪ 快退</button>
+            <button id="btn-forward" class="btn" title="前进 1/7 影片长度 (→)">⏩ 快进</button>
+          </div>
+
+          <!-- 第4行：上一个 / 下一个 -->
+          <div class="btn-row btn-row-double">
+            <button id="btn-prev" class="btn" title="上一个视频 ([)">⏮ 上一个</button>
+            <button id="btn-next" class="btn" title="下一个视频 (])">下一个 ⏭</button>
+          </div>
+
+          <!-- 第5行：暂停 -->
+          <div class="btn-row btn-row-single">
+            <button id="btn-play" class="btn btn-play" title="播放/暂停 (空格)">▶ 播放</button>
+          </div>
+
+          <!-- 第6行：删除 -->
+          <div class="btn-row btn-row-single">
+            <button id="btn-delete" class="btn btn-danger" title="删除当前视频 (Del)">🗑 删除</button>
+          </div>
         </div>
 
-        <!-- 第2行：裁剪（新功能·单按钮） -->
-        <div class="btn-row btn-row-single">
-          <button id="btn-clip" class="btn btn-clip" title="裁剪并导出 (C)">✂ 裁剪</button>
-        </div>
-
-        <!-- 第3行：快退 / 快进（原有·双按钮） -->
-        <div class="btn-row btn-row-double">
-          <button id="btn-rewind"  class="btn" title="后退 1/7 影片长度 (←)">⏪ 快退</button>
-          <button id="btn-forward" class="btn" title="前进 1/7 影片长度 (→)">⏩ 快进</button>
-        </div>
-
-        <!-- 第4行：上一个 / 下一个（新功能·双按钮） -->
-        <div class="btn-row btn-row-double">
-          <button id="btn-prev" class="btn" title="上一个视频 ([)">⏮ 上一个</button>
-          <button id="btn-next" class="btn" title="下一个视频 (])">下一个 ⏭</button>
-        </div>
-
-        <!-- 第5行：暂停（原有·单按钮） -->
-        <div class="btn-row btn-row-single">
-          <button id="btn-play" class="btn btn-play" title="播放/暂停 (空格)">▶ 播放</button>
-        </div>
-
-        <!-- 第5行：删除（原有·单按钮） -->
-        <div class="btn-row btn-row-single">
-          <button id="btn-delete" class="btn btn-danger" title="删除当前视频 (Del)">🗑 删除</button>
+        <div id="playlist-panel">
+          <div id="playlist-toolbar">
+            <div id="playlist-summary">
+              <strong>播放列表</strong>
+              <span id="playlist-count">0 个视频</span>
+            </div>
+            <div id="playlist-sort" role="group" aria-label="排序方式">
+              <button id="sort-name" class="sort-btn active" type="button">名称</button>
+              <button id="sort-size" class="sort-btn" type="button">大小</button>
+            </div>
+          </div>
+          <div id="playlist-wrap">
+            <ol id="playlist"></ol>
+            <div id="playlist-empty">等待选择视频目录</div>
+          </div>
         </div>
 
       </div>

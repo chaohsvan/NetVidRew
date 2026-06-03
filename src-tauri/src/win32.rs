@@ -3,12 +3,12 @@
 /// 在 Tauri 主窗口的客户区创建一个黑色背景子窗口，MPV 通过 --wid 渲染视频于此。
 use std::ffi::c_void;
 use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
-use windows::Win32::Graphics::Gdi::{GetStockObject, HBRUSH, HGDIOBJ, BLACK_BRUSH};
+use windows::Win32::Graphics::Gdi::{GetStockObject, BLACK_BRUSH, HBRUSH, HGDIOBJ};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, MoveWindow, RegisterClassW, SetWindowPos,
-    HWND_TOP, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, WINDOW_EX_STYLE, WINDOW_STYLE,
-    WNDCLASSW, WS_CHILD, WS_CLIPCHILDREN, WS_CLIPSIBLINGS, WS_VISIBLE, WS_EX_TRANSPARENT,
+    CreateWindowExW, DefWindowProcW, MoveWindow, RegisterClassW, SetWindowPos, HWND_TOP,
+    SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, WINDOW_EX_STYLE, WINDOW_STYLE, WNDCLASSW, WS_CHILD,
+    WS_CLIPCHILDREN, WS_CLIPSIBLINGS, WS_EX_TRANSPARENT, WS_VISIBLE,
 };
 
 static CLASS_REGISTERED: std::sync::OnceLock<()> = std::sync::OnceLock::new();
@@ -38,8 +38,8 @@ unsafe extern "system" fn video_wnd_proc(
 /// 在 Tauri 主窗口内创建视频容器子窗口，返回 HWND 整数值
 pub fn create_video_child_window(parent: isize, width: i32, height: i32) -> Result<isize, String> {
     unsafe {
-        let instance = GetModuleHandleW(None)
-            .map_err(|e| format!("GetModuleHandleW 失败：{}", e))?;
+        let instance =
+            GetModuleHandleW(None).map_err(|e| format!("GetModuleHandleW 失败：{}", e))?;
 
         // 只注册一次窗口类
         CLASS_REGISTERED.get_or_init(|| {
@@ -83,7 +83,10 @@ pub fn create_video_child_window(parent: isize, width: i32, height: i32) -> Resu
         let _ = SetWindowPos(
             hwnd,
             Some(HWND_TOP),
-            0, 0, 0, 0,
+            0,
+            0,
+            0,
+            0,
             SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
         );
 
@@ -100,6 +103,14 @@ pub fn move_video_window(hwnd: isize, x: i32, y: i32, width: i32, height: i32) {
         let h = isize_to_hwnd(hwnd);
         let _ = MoveWindow(h, x, y, width.max(1), height.max(1), true);
         // 确保视频窗口始终在 WebView2 之上
-        let _ = SetWindowPos(h, Some(HWND_TOP), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        let _ = SetWindowPos(
+            h,
+            Some(HWND_TOP),
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+        );
     }
 }

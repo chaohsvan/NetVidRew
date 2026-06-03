@@ -1,5 +1,6 @@
 use crate::mpv::MpvController;
-use crate::state::{AppState, PlaybackState};
+use crate::playlist::SortMode;
+use crate::state::{AppState, PlaybackState, PlaylistState};
 use crate::utils;
 use tauri::State;
 use tauri_plugin_dialog::DialogExt;
@@ -20,7 +21,7 @@ pub async fn open_directory(
 
     let dir_path = match folder {
         Some(p) => p.into_path().map_err(|e| format!("路径转换失败：{}", e))?,
-        None    => return Err("用户取消了目录选择".to_string()),
+        None => return Err("用户取消了目录选择".to_string()),
     };
 
     let new_playlist = crate::playlist::Playlist::from_dir(&dir_path)?;
@@ -28,8 +29,8 @@ pub async fn open_directory(
         return Err(format!("目录 {:?} 中未找到视频文件", dir_path));
     }
 
-    let file_names  = new_playlist.file_names();
-    let first_file  = new_playlist.current_file().unwrap().clone();
+    let file_names = new_playlist.file_names();
+    let first_file = new_playlist.current_file().unwrap().clone();
 
     {
         let mut pl = state.playlist.lock().map_err(|e| e.to_string())?;
@@ -40,7 +41,11 @@ pub async fn open_directory(
         let guard = state.video_hwnd.lock().map_err(|e| e.to_string())?;
         *guard
     };
-    eprintln!("[NetVidRew] open_directory: wid={:?}, file={:?}", wid, first_file.file_name());
+    eprintln!(
+        "[NetVidRew] open_directory: wid={:?}, file={:?}",
+        wid,
+        first_file.file_name()
+    );
 
     {
         let mut mpv_guard = state.mpv.lock().map_err(|e| e.to_string())?;
@@ -88,16 +93,33 @@ pub fn get_playback_state(state: State<'_, AppState>) -> Result<PlaybackState, S
         return Ok(PlaybackState {
             time_pos: 0.0,
             duration: 0.0,
-            paused:   true,
-            volume:   80,
+            paused: true,
+            volume: 80,
             filename: String::new(),
         });
     };
 
-    let time_pos = ctrl.get_property("time-pos").ok().and_then(|v| v.as_f64()).unwrap_or(0.0);
-    let duration = ctrl.get_property("duration").ok().and_then(|v| v.as_f64()).unwrap_or(0.0);
-    let paused   = ctrl.get_property("pause").ok().and_then(|v| v.as_bool()).unwrap_or(false);
-    let volume   = ctrl.get_property("volume").ok().and_then(|v| v.as_f64()).map(|v| v as i64).unwrap_or(80);
+    let time_pos = ctrl
+        .get_property("time-pos")
+        .ok()
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
+    let duration = ctrl
+        .get_property("duration")
+        .ok()
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
+    let paused = ctrl
+        .get_property("pause")
+        .ok()
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let volume = ctrl
+        .get_property("volume")
+        .ok()
+        .and_then(|v| v.as_f64())
+        .map(|v| v as i64)
+        .unwrap_or(80);
 
     let pl = state.playlist.lock().map_err(|e| e.to_string())?;
     let filename = pl
@@ -106,7 +128,60 @@ pub fn get_playback_state(state: State<'_, AppState>) -> Result<PlaybackState, S
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_default();
 
-    Ok(PlaybackState { time_pos, duration, paused, volume, filename })
+    Ok(PlaybackState {
+        time_pos,
+        duration,
+        paused,
+        volume,
+        filename,
+    })
+}
+
+/// 获取播放列表窗口状态
+#[tauri::command]
+pub fn get_playlist_state(state: State<'_, AppState>) -> Result<PlaylistState, String> {
+    let pl = state.playlist.lock().map_err(|e| e.to_string())?;
+    Ok(PlaylistState {
+        items: pl.items(),
+        current_index: pl.current_index(),
+        sort_mode: pl.sort_mode(),
+    })
+}
+
+/// 设置播放列表排序方式；仅重排顺序，当前播放文件保持不变
+#[tauri::command]
+pub fn set_playlist_sort(
+    state: State<'_, AppState>,
+    sort_mode: SortMode,
+) -> Result<PlaylistState, String> {
+    let mut pl = state.playlist.lock().map_err(|e| e.to_string())?;
+    pl.sort_by(sort_mode);
+    Ok(PlaylistState {
+        items: pl.items(),
+        current_index: pl.current_index(),
+        sort_mode: pl.sort_mode(),
+    })
+}
+
+/// 按播放列表当前顺序切换到指定索引的视频
+#[tauri::command]
+pub fn play_playlist_index(
+    state: State<'_, AppState>,
+    index: usize,
+) -> Result<PlaylistState, String> {
+    let target_file = {
+        let mut pl = state.playlist.lock().map_err(|e| e.to_string())?;
+        pl.set_current(index)
+            .ok_or_else(|| "播放列表索引无效".to_string())?
+    };
+
+    {
+        let mpv_guard = state.mpv.lock().map_err(|e| e.to_string())?;
+        let ctrl = mpv_guard.as_ref().ok_or_else(|| "MPV 未启动".to_string())?;
+        ctrl.play_file(&target_file)?;
+    }
+
+    get_playlist_state(state)
 }
 
 /// 切换到下一个视频；返回下一个文件名，None 表示已是最后一个
@@ -114,7 +189,7 @@ pub fn get_playback_state(state: State<'_, AppState>) -> Result<PlaybackState, S
 pub fn navigate_next(state: State<'_, AppState>) -> Result<Option<String>, String> {
     let next_file = {
         let mut pl = state.playlist.lock().map_err(|e| e.to_string())?;
-        pl.next().cloned()
+        pl.next()
     };
 
     if let Some(ref next) = next_file {
@@ -132,7 +207,7 @@ pub fn navigate_next(state: State<'_, AppState>) -> Result<Option<String>, Strin
 pub fn navigate_prev(state: State<'_, AppState>) -> Result<Option<String>, String> {
     let prev_file = {
         let mut pl = state.playlist.lock().map_err(|e| e.to_string())?;
-        pl.prev().cloned()
+        pl.prev()
     };
 
     if let Some(ref prev) = prev_file {
@@ -213,11 +288,20 @@ pub async fn clip_video(
 
     let src_path = {
         let pl = state.playlist.lock().map_err(|e| e.to_string())?;
-        pl.current_file().cloned().ok_or_else(|| "播放列表为空".to_string())?
+        pl.current_file()
+            .cloned()
+            .ok_or_else(|| "播放列表为空".to_string())?
     };
 
-    let ext  = src_path.extension().and_then(|e| e.to_str()).unwrap_or("mp4").to_string();
-    let stem = src_path.file_stem().and_then(|s| s.to_str()).unwrap_or("clip");
+    let ext = src_path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("mp4")
+        .to_string();
+    let stem = src_path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("clip");
     let default_name = format!(
         "{}_clip_{}-{}.{}",
         stem,
@@ -235,7 +319,7 @@ pub async fn clip_video(
 
     let out_path = match save_path {
         Some(p) => p.into_path().map_err(|e| format!("路径转换失败：{}", e))?,
-        None    => return Ok(None),
+        None => return Ok(None),
     };
 
     if !utils::is_tool_available("ffmpeg") {
@@ -250,11 +334,16 @@ pub async fn clip_video(
     let status = tokio::task::spawn_blocking(move || {
         std::process::Command::new("ffmpeg")
             .arg("-y")
-            .arg("-ss").arg(start_sec.to_string())
-            .arg("-i").arg(&src_path)
-            .arg("-t").arg(duration.to_string())
-            .arg("-c").arg("copy")
-            .arg("-avoid_negative_ts").arg("make_zero")
+            .arg("-ss")
+            .arg(start_sec.to_string())
+            .arg("-i")
+            .arg(&src_path)
+            .arg("-t")
+            .arg(duration.to_string())
+            .arg("-c")
+            .arg("copy")
+            .arg("-avoid_negative_ts")
+            .arg("make_zero")
             .arg(&out_path_clone)
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
@@ -286,6 +375,6 @@ where
     let guard = state.mpv.lock().map_err(|e| e.to_string())?;
     match guard.as_ref() {
         Some(ctrl) => f(ctrl),
-        None       => Err("MPV 未启动".to_string()),
+        None => Err("MPV 未启动".to_string()),
     }
 }

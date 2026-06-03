@@ -11,8 +11,8 @@ use state::AppState;
 use std::sync::Mutex;
 use tauri::Manager;
 
-/// 右侧按钮栏的初始物理像素宽度（CSS 20% × 1280px 视口宽度，随后由前端 resize_video 动态同步）
-const RIGHT_PANEL_WIDTH: i32 = 216;
+/// 右侧栏的初始物理像素宽度（对应 CSS --side-w 在 1280px 视口下约 333px，随后由前端 resize_video 动态同步）
+const RIGHT_PANEL_WIDTH: i32 = 333;
 /// 底部控制栏的初始物理像素高度（对应 CSS --ctrl-h: 130px）
 const CONTROLS_HEIGHT: i32 = 130;
 
@@ -25,9 +25,9 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(AppState {
-            playlist:    Mutex::new(playlist::Playlist::new()),
-            mpv:         Mutex::new(None),
-            video_hwnd:  Mutex::new(None),
+            playlist: Mutex::new(playlist::Playlist::new()),
+            mpv: Mutex::new(None),
+            video_hwnd: Mutex::new(None),
         })
         .setup(|app| {
             #[cfg(windows)]
@@ -36,12 +36,15 @@ pub fn run() {
                 let parent_hwnd: isize = win.hwnd()?.0 as isize;
 
                 let size = win.inner_size()?;
-                let video_w = (size.width  as i32 - RIGHT_PANEL_WIDTH).max(1);
+                let video_w = (size.width as i32 - RIGHT_PANEL_WIDTH).max(1);
                 let video_h = (size.height as i32 - CONTROLS_HEIGHT).max(1);
 
                 match win32::create_video_child_window(parent_hwnd, video_w, video_h) {
                     Ok(hwnd) => {
-                        eprintln!("[NetVidRew] 视频子窗口创建成功，HWND={}, 尺寸={}x{}", hwnd, video_w, video_h);
+                        eprintln!(
+                            "[NetVidRew] 视频子窗口创建成功，HWND={}, 尺寸={}x{}",
+                            hwnd, video_w, video_h
+                        );
                         *app.state::<AppState>().video_hwnd.lock().unwrap() = Some(hwnd);
                     }
                     Err(e) => {
@@ -60,6 +63,9 @@ pub fn run() {
             commands::seek_absolute,
             commands::set_volume,
             commands::get_playback_state,
+            commands::get_playlist_state,
+            commands::set_playlist_sort,
+            commands::play_playlist_index,
             commands::navigate_next,
             commands::navigate_prev,
             commands::delete_current,

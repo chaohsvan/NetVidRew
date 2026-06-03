@@ -24,8 +24,9 @@
   --clip-range:   rgba(52, 152, 219, 0.18); /* 区间高亮 */
 
   --ctrl-h:       130px;
-  /* 按钮字号：随右侧面板宽度（20vw）自适应，最小 11px 最大 14px */
+  /* 按钮字号：随右侧面板宽度自适应，最小 11px 最大 14px */
   --btn-fs:       clamp(11px, 1.1vw, 14px);
+  --side-w:       clamp(280px, 26vw, 380px);
 }
 
 html, body {
@@ -64,14 +65,14 @@ html, body {
   overflow: hidden;
 }
 
-/* ===== 右侧按钮栏（20% 宽，flex 均分高度） ===== */
+/* ===== 右侧控制栏 ===== */
 #right-panel {
-  width: 20%;
+  width: var(--side-w);
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
   padding: 8px 12px;
-  gap: 6px;
+  gap: 8px;
   background: var(--bg);
   border-left: 1px solid #333;
   overflow: hidden;
@@ -85,13 +86,20 @@ html, body {
   overflow: hidden;
   text-overflow: ellipsis;
   padding: 2px 0 4px;
-  min-height: 0;
+  min-height: 18px;
   display: none;
+}
+
+/* ===== 控制按钮组 ===== */
+#control-buttons {
+  flex-shrink: 0;
+  display: grid;
+  grid-template-rows: repeat(6, 58px);
+  gap: 6px;
 }
 
 /* ===== 按钮行容器 ===== */
 .btn-row {
-  flex: 1;
   min-height: 0;
   display: flex;
   align-items: stretch;
@@ -190,6 +198,160 @@ html, body {
   color: #fff;
 }
 .btn-danger:hover { background: #f06060; }
+
+/* ===== 内嵌播放列表 ===== */
+#playlist-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid #333;
+  padding-top: 8px;
+}
+
+#playlist-toolbar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 8px;
+}
+
+#playlist-summary {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+#playlist-summary strong {
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+#playlist-count {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+#playlist-sort {
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: repeat(2, 48px);
+  height: 30px;
+  border: 1px solid #444;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #181818;
+}
+
+.sort-btn {
+  border: 0;
+  border-right: 1px solid #444;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.sort-btn:last-child {
+  border-right: 0;
+}
+
+.sort-btn:hover {
+  background: var(--surface2);
+  color: var(--text);
+}
+
+.sort-btn.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+#playlist-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid #2b2b2b;
+  border-radius: 6px;
+  background: #151515;
+}
+
+#playlist {
+  height: 100%;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.playlist-item {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) 58px;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 8px;
+  border-bottom: 1px solid #262626;
+  color: var(--text);
+  cursor: pointer;
+  outline: none;
+  transition: background 0.12s;
+}
+
+.playlist-item:hover,
+.playlist-item:focus-visible {
+  background: var(--surface);
+}
+
+.playlist-item.current {
+  background: rgba(74, 158, 255, 0.22);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.playlist-item.current:hover,
+.playlist-item.current:focus-visible {
+  background: rgba(74, 158, 255, 0.30);
+}
+
+#playlist.switching .playlist-item {
+  pointer-events: none;
+  opacity: 0.75;
+}
+
+.item-index {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.item-name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 12px;
+}
+
+.item-size {
+  color: var(--text-muted);
+  font-size: 11px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+#playlist-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
+}
 
 /* ===== 底部控制栏 ===== */
 #controls {
@@ -331,7 +493,7 @@ html, body {
 #status-msg {
   position: fixed;
   bottom: calc(var(--ctrl-h) + 12px);
-  right: calc(20% + 12px);
+  right: calc(var(--side-w) + 12px);
   font-size: 14px;
   padding: 8px 16px;
   border-radius: 6px;
